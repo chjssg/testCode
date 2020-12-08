@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>promise的实现</title>
+</head>
+<body>
+<script>
+
+    // let a = new Promise((resolve, reject) => {
+    //     console.log(123);
+    //     setTimeout(function () {
+    //         resolve('hhh')
+    //     }, 0)
+    //
+    // });
+    // a.then(res => {
+    //     console.log(1233);
+    //     console.log(res)
+    // }, rej => {
+    //     console.log(rej)
+    // })
+    // Promise.all([1,2,3]).then(val => {
+    //     console.log(val)
+    // })
+    // Promise.race([1,2,3]).then(val => {
+    //     console.log(val)
+    // })
+
+    console.log('----------------------');
+    function promise(executor) {
+        let self = this;
+        self.status = 'pending';
+        self.data = null;
+        self.callbacks = {};
+
+        function resolve(data) {
+            if (self.status !== 'pending') return;
+            self.status = 'resolved';
+            self.data = data;
+            if (self.callbacks.onResolved) {
+                self.callbacks.onResolved(data)
+            }
+        }
+        function reject(data) {
+            if (self.status !== 'pending') return;
+            self.status = 'rejected';
+            self.data = data;
+            if (self.callbacks.onRejected) {
+                self.callbacks.onRejected(data)
+            }
+        }
+        executor(resolve, reject)
+    }
+    promise.prototype.then = function(onResolved, onRejected) {
+        let self = this;
+        onResolved = typeof onResolved === 'function' ? onResolved : value => value;
+        onRejected = typeof onRejected === 'function' ? onRejected : reason => {throw reason};
+        if (self.status === 'resolved') {
+            queueMicrotask(() => {
+                handle(onResolved)
+            })
+        } else if (self.status === 'rejected') {
+            queueMicrotask(() => {
+                handle(onRejected)
+            })
+        } else if (self.status === 'pending') {
+            self.callbacks = {
+                onResolved: () => {
+                    queueMicrotask(() => {
+                        handle(onResolved)
+                    })
+                },
+                onRejected: () => {
+                    queueMicrotask(() => {
+                        handle(onRejected)
+                    })
+                }
+            }
+        }
+        function handle(callback) {
+            return new promise((resolve, reject) => {
+                resolve(callback(self.data))
+            })
+        }
+    };
+    promise.resolve = function(val) {
+        return new promise(resolve => {
+            resolve(val)
+        })
+    }
+
+    promise.race = function (args) {
+        return new promise((resolve, reject) => {
+            args.forEach(item => {
+                promise.resolve(item).then(val => {
+                    resolve(val)
+                }, val => {
+                    reject(val)
+                })
+            })
+        })
+
+    };
+    promise.all = function (args) {
+        let results = [];
+        let num = 0;
+        let total = args.length
+        return new promise((resolve, reject) => {
+            args.forEach((item, index) => {
+                promise.resolve(item).then(val => {
+                    results[index] = val;
+                    num++;
+                    if (num === total) {
+                        resolve(results)
+                    }
+                }, val => {
+                    reject(val)
+                })
+            })
+        })
+    };
+
+    let b = new promise((resolve, reject) => {
+        console.log(123)
+        setTimeout(function () {
+            resolve('hhh')
+        }, 0)
+    });
+    b.then(res => {
+        console.log(222);
+        console.log(res)
+    });
+
+    promise.race(['r','a','c', 'e']).then(val => {
+        console.log(val)
+    });
+
+    promise.all(['a','l','l']).then(val => {
+        console.log(val)
+    })
+</script>
+</body>
+</html>
